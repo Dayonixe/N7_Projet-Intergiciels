@@ -4,6 +4,8 @@ import linda.Linda;
 import linda.Tuple;
 import linda.shm.CentralizedLinda;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -13,10 +15,16 @@ import java.util.concurrent.Executors;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 
-public class Test1 {
+@RunWith(Parameterized.class)
+public class TestReadBeforeTake {
     private static final Linda LINDA = new CentralizedLinda();
 
     private static final Executor EXECUTOR = Executors.newCachedThreadPool();
+
+    @Parameterized.Parameters
+    public static Object[][] data() {
+        return new Object[5][0];
+    }
 
     @Test
     public void test() throws InterruptedException, ExecutionException {
