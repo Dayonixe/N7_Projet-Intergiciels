@@ -5,12 +5,14 @@ import linda.Linda;
 import linda.Tuple;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Shared memory implementation of Linda.
  */
 public class CentralizedLinda implements Linda {
     private final List<Tuple> tuples = new ArrayList<>();
+    private final Set<EventListener> listeners = new HashSet<>();
 
     public CentralizedLinda() {
     }
@@ -20,66 +22,56 @@ public class CentralizedLinda implements Linda {
         tuples.add(t.deepclone());
         // On débloque tous les threads en attente de typle pour qu'il vérifie si ce nouveau tuple leur convient
         notifyAll();
+
+        listeners.stream().filter(l -> t.matches(l.getTemplate()))
+                // intermediate list to prevent concurrent modification on tuples by tryListener
+                .collect(Collectors.toList()).forEach(this::tryListener);
     }
 
     @Override
-    public synchronized Tuple take(Tuple template) {
+    public Tuple take(Tuple template) {
+        return get(template, true, true);
+    }
+
+    @Override
+    public Tuple read(Tuple template) {
+        return get(template, false, true);
+    }
+
+    @Override
+    public synchronized Tuple tryTake(Tuple template) {
+        return get(template, true, false);
+    }
+
+    @Override
+    public synchronized Tuple tryRead(Tuple template) {
+        return get(template, false, false);
+    }
+
+    private synchronized Tuple get(Tuple template, boolean remove, boolean block) {
         Iterator<Tuple> iterator = tuples.iterator();
-        while (iterator.hasNext()) {
+        while(iterator.hasNext()) {
             Tuple tuple = iterator.next();
             if (tuple.matches(template)) {
-                iterator.remove();
+                if(remove) {
+                    iterator.remove();
+                }
                 return tuple;
             }
         }
-        // Attendre qu'il y en ait un qui match
+
+        if(!block) {
+            return null;
+        }
+
+        // Attendre qu'un nouveau tuple soit soumit
         // TODO : Optimiser en ne regardant que le dernier tuple (celui venant d'être ajouté) ?
         try {
             wait();
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
-        return take(template);
-    }
-
-    @Override
-    public synchronized Tuple read(Tuple template) {
-        for (Tuple tuple : tuples) {
-            if (tuple.matches(template)) {
-                return tuple;
-            }
-        }
-        // Attendre qu'un nouveau tuple soit soumit
-        try {
-            wait();
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
         return read(template);
-    }
-
-    @Override
-    public synchronized Tuple tryTake(Tuple template) {
-        Iterator<Tuple> iterator = tuples.iterator();
-        while (iterator.hasNext()) {
-            Tuple tuple = iterator.next();
-            if (tuple.matches(template)) {
-                iterator.remove();
-                return tuple;
-            }
-        }
-        // Attendre qu'il y en ait un qui match
-        return null;
-    }
-
-    @Override
-    public synchronized Tuple tryRead(Tuple template) {
-        for (Tuple tuple : tuples) {
-            if (tuple.matches(template)) {
-                return tuple;
-            }
-        }
-        return null;
     }
 
     @Override
@@ -109,14 +101,23 @@ public class CentralizedLinda implements Linda {
 
     @Override
     public void eventRegister(eventMode mode, eventTiming timing, Tuple template, Callback callback) {
+        EventListener listener = new EventListener(template, mode, timing, callback);
+        listeners.add(listener);
+        if(timing == eventTiming.IMMEDIATE) {
+            tryListener(listener);
+        }
+    }
 
+    private void tryListener(EventListener listener) {
+        boolean remove = listener.getMode() == eventMode.TAKE;
+        Tuple tuple = get(listener.getTemplate(), remove, false);
+        if(tuple != null) {
+            listener.getCallback().call(tuple);
+        }
     }
 
     @Override
     public void debug(String prefix) {
 
     }
-
-    // TO BE COMPLETED
-
 }
