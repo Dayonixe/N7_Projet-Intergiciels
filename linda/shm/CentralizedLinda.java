@@ -5,6 +5,8 @@ import linda.Linda;
 import linda.Tuple;
 
 import java.util.*;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -30,25 +32,25 @@ public class CentralizedLinda implements Linda {
 
     @Override
     public Tuple take(Tuple template) {
-        return get(template, true, true);
+        return get(template, true, this::take);
     }
 
     @Override
     public Tuple read(Tuple template) {
-        return get(template, false, true);
+        return get(template, false, this::read);
     }
 
     @Override
     public synchronized Tuple tryTake(Tuple template) {
-        return get(template, true, false);
+        return get(template, true, null);
     }
 
     @Override
     public synchronized Tuple tryRead(Tuple template) {
-        return get(template, false, false);
+        return get(template, false, null);
     }
 
-    private synchronized Tuple get(Tuple template, boolean remove, boolean block) {
+    private synchronized Tuple get(Tuple template, boolean remove, Function<Tuple, Tuple> callAfterBlock) {
         Iterator<Tuple> iterator = tuples.iterator();
         while(iterator.hasNext()) {
             Tuple tuple = iterator.next();
@@ -60,7 +62,7 @@ public class CentralizedLinda implements Linda {
             }
         }
 
-        if(!block) {
+        if(callAfterBlock == null) {
             return null;
         }
 
@@ -71,7 +73,7 @@ public class CentralizedLinda implements Linda {
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
-        return read(template);
+        return callAfterBlock.apply(template);
     }
 
     @Override
@@ -110,7 +112,7 @@ public class CentralizedLinda implements Linda {
 
     private void tryListener(EventListener listener) {
         boolean remove = listener.getMode() == eventMode.TAKE;
-        Tuple tuple = get(listener.getTemplate(), remove, false);
+        Tuple tuple = get(listener.getTemplate(), remove, null);
         if(tuple != null) {
             listener.getCallback().call(tuple);
         }
