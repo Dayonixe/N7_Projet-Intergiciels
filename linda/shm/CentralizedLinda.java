@@ -5,14 +5,15 @@ import linda.Linda;
 import linda.Tuple;
 
 import java.util.*;
-import java.util.function.Consumer;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
  * Shared memory implementation of Linda.
  */
 public class CentralizedLinda implements Linda {
+    private final LockPool readerLocks = new LockPool();
+    private final LockPool takerLocks = new LockPool();
+
     private final List<Tuple> tuples = new ArrayList<>();
     private final Set<EventListener> listeners = new HashSet<>();
 
@@ -20,10 +21,14 @@ public class CentralizedLinda implements Linda {
     }
 
     @Override
+    // Synchronized on tuples to prevent concurrent modification
     public synchronized void write(Tuple t) {
         tuples.add(t.deepclone());
-        // On débloque tous les threads en attente de typle pour qu'il vérifie si ce nouveau tuple leur convient
-        notifyAll();
+
+        // Unlock all readers
+        readerLocks.unlockAll()
+                // Then unlock all takers
+                .thenRun(takerLocks::unlockAll);
 
         listeners.stream().filter(l -> t.matches(l.getTemplate()))
                 // intermediate list to prevent concurrent modification on tuples by tryListener
@@ -32,88 +37,96 @@ public class CentralizedLinda implements Linda {
 
     @Override
     public Tuple take(Tuple template) {
-        return get(template, true, this::take);
+        Lock lock = takerLocks.create();
+        Tuple tuple = getOrLock(template, true, lock);
+        lock.destroy();
+        return tuple;
     }
 
     @Override
     public Tuple read(Tuple template) {
-        return get(template, false, this::read);
+        Lock lock = readerLocks.create();
+        Tuple tuple = getOrLock(template, false, lock);
+        lock.destroy();
+        return tuple;
     }
 
     @Override
-    public synchronized Tuple tryTake(Tuple template) {
-        return get(template, true, null);
+    public Tuple tryTake(Tuple template) {
+        return get(template, true);
     }
 
     @Override
-    public synchronized Tuple tryRead(Tuple template) {
-        return get(template, false, null);
+    public Tuple tryRead(Tuple template) {
+        return get(template, false);
     }
 
-    private synchronized Tuple get(Tuple template, boolean remove, Function<Tuple, Tuple> callAfterBlock) {
+    // Synchronized on tuples to prevent concurrent modification
+    private synchronized Tuple get(Tuple template, boolean remove) {
         Iterator<Tuple> iterator = tuples.iterator();
-        while(iterator.hasNext()) {
+        while (iterator.hasNext()) {
             Tuple tuple = iterator.next();
             if (tuple.matches(template)) {
-                if(remove) {
+                if (remove) {
                     iterator.remove();
                 }
                 return tuple;
             }
         }
+        return null;
+    }
 
-        if(callAfterBlock == null) {
-            return null;
-        }
-
-        // Attendre qu'un nouveau tuple soit soumit
-        // TODO : Optimiser en ne regardant que le dernier tuple (celui venant d'être ajouté) ?
-        try {
-            wait();
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-        }
-        return callAfterBlock.apply(template);
+    private Tuple getOrLock(Tuple template, boolean remove, Lock lock) {
+        do {
+            Tuple tuple = get(template, remove);
+            lock.unlocked();
+            if (tuple != null) {
+                return tuple;
+            }
+            // Attendre qu'un nouveau tuple soit soumis
+            // TODO : Optimiser en ne regardant que le dernier tuple (celui venant d'être ajouté) ?
+            lock.lock();
+        } while (true);
     }
 
     @Override
-    public synchronized Collection<Tuple> takeAll(Tuple template) {
-        Set<Tuple> ans = new HashSet<>();
-        Iterator<Tuple> iterator = tuples.iterator();
+    public Collection<Tuple> takeAll(Tuple template) {
+        return getAll(template, true);
+    }
+
+    @Override
+    public Collection<Tuple> readAll(Tuple template) {
+        return getAll(template, false);
+    }
+
+    public synchronized Collection<Tuple> getAll(Tuple template, boolean remove) {
+        Set<Tuple> tuples = new HashSet<>();
+        Iterator<Tuple> iterator = this.tuples.iterator();
         while (iterator.hasNext()) {
             Tuple tuple = iterator.next();
             if (tuple.matches(template)) {
-                iterator.remove();
-                ans.add(tuple);
+                if (remove) {
+                    iterator.remove();
+                }
+                tuples.add(tuple);
             }
         }
-        return ans;
-    }
-
-    @Override
-    public synchronized Collection<Tuple> readAll(Tuple template) {
-        Set<Tuple> ans = new HashSet<>();
-        for (Tuple tuple : tuples) {
-            if (tuple.matches(template)) {
-                ans.add(tuple);
-            }
-        }
-        return ans;
+        return tuples;
     }
 
     @Override
     public void eventRegister(eventMode mode, eventTiming timing, Tuple template, Callback callback) {
         EventListener listener = new EventListener(template, mode, timing, callback);
         listeners.add(listener);
-        if(timing == eventTiming.IMMEDIATE) {
+        if (timing == eventTiming.IMMEDIATE) {
             tryListener(listener);
         }
     }
 
     private void tryListener(EventListener listener) {
         boolean remove = listener.getMode() == eventMode.TAKE;
-        Tuple tuple = get(listener.getTemplate(), remove, null);
-        if(tuple != null) {
+        Tuple tuple = get(listener.getTemplate(), remove);
+        if (tuple != null) {
             listener.getCallback().call(tuple);
         }
     }
