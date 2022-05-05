@@ -32,10 +32,8 @@ public class CentralizedLinda implements Linda {
         // Then unlock one random taker the match the new tuple
         takerLocks.unlockRandom(t).join();
 
-        synchronized (tuples) {
-            listeners.stream().filter(l -> t.matches(l.getTemplate()))
-                    // intermediate list to prevent concurrent modification on tuples by tryListener
-                    .collect(Collectors.toList()).forEach(this::tryListener);
+        synchronized (listeners) {
+            listeners.removeIf(this::tryListener);
         }
     }
 
@@ -119,20 +117,24 @@ public class CentralizedLinda implements Linda {
     }
 
     @Override
-    public void eventRegister(eventMode mode, eventTiming timing, Tuple template, Callback callback) {
+    public synchronized void eventRegister(eventMode mode, eventTiming timing, Tuple template, Callback callback) {
         EventListener listener = new EventListener(template, mode, timing, callback);
-        listeners.add(listener);
-        if (timing == eventTiming.IMMEDIATE) {
-            tryListener(listener);
+        if (timing == eventTiming.IMMEDIATE && tryListener(listener)) {
+            // Si on est en mode immédiat et que le listener est parvenu à récupérer un tuple
+            // -> pas besoin de l'ajouter à la liste
+            return;
         }
+        listeners.add(listener);
     }
 
-    private void tryListener(EventListener listener) {
+    private boolean tryListener(EventListener listener) {
         boolean remove = listener.getMode() == eventMode.TAKE;
         Tuple tuple = get(listener.getTemplate(), remove);
         if (tuple != null) {
             listener.getCallback().call(tuple);
+            return true;
         }
+        return false;
     }
 
     @Override
