@@ -5,7 +5,6 @@ import linda.Linda;
 import linda.Tuple;
 
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * Shared memory implementation of Linda.
@@ -15,7 +14,11 @@ public class CentralizedLinda implements Linda {
     private final TupleLockPool takerLocks = new TupleLockPool();
 
     private final List<Tuple> tuples = new ArrayList<>();
-    private final Set<EventListener> listeners = new HashSet<>();
+
+    // Sorted by creation time
+    private final SortedSet<EventListener> readListeners = new TreeSet<>();
+    // Sorted by creation time
+    private final SortedSet<EventListener> takeListeners = new TreeSet<>();
 
     public CentralizedLinda() {
     }
@@ -32,8 +35,17 @@ public class CentralizedLinda implements Linda {
         // Then unlock one random taker the match the new tuple
         takerLocks.unlockRandom(t).join();
 
-        synchronized (listeners) {
-            listeners.removeIf(this::tryListener);
+        // Activation des listeners read :
+        synchronized (readListeners) {
+            readListeners.removeIf(l -> l.tryCall(t));
+        }
+
+        // Activation du premier listener take qui match :
+        synchronized (takeListeners) {
+            takeListeners.stream().filter(l -> t.matches(l.getTemplate())).findFirst().ifPresent(listener -> {
+                listener.call(t);
+                takeListeners.remove(listener);
+            });
         }
     }
 
@@ -124,14 +136,18 @@ public class CentralizedLinda implements Linda {
             // -> pas besoin de l'ajouter à la liste
             return;
         }
-        listeners.add(listener);
+        if(mode == eventMode.READ) {
+            readListeners.add(listener);
+        }else{
+            takeListeners.add(listener);
+        }
     }
 
     private boolean tryListener(EventListener listener) {
         boolean remove = listener.getMode() == eventMode.TAKE;
         Tuple tuple = get(listener.getTemplate(), remove);
         if (tuple != null) {
-            listener.getCallback().call(tuple);
+            listener.call(tuple);
             return true;
         }
         return false;
