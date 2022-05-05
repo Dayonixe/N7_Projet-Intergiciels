@@ -1,4 +1,4 @@
-package linda.test;
+package linda.test.shm;
 
 import linda.Linda;
 import linda.Tuple;
@@ -9,18 +9,12 @@ import org.junit.runners.Parameterized;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 
 @RunWith(Parameterized.class)
-public class TestReadBeforeTake {
-    private static final Linda LINDA = new CentralizedLinda();
-
-    private static final Executor EXECUTOR = Executors.newCachedThreadPool();
-
+public class TestReadBeforeTake extends TestSHM {
     @Parameterized.Parameters
     public static Object[][] data() {
         return new Object[5][0];
@@ -49,32 +43,5 @@ public class TestReadBeforeTake {
 
         Tuple tuple = LINDA.tryRead(template);
         assertNull(tuple);
-    }
-
-    private CompletableFuture<Tuple> read(Tuple template) {
-        return CompletableFuture.supplyAsync(() -> {
-            Tuple tuple = LINDA.read(template);
-            System.out.println("Read tuple: "+tuple);
-            return tuple;
-        }, EXECUTOR);
-    }
-
-    private CompletableFuture<Tuple> take(Tuple template) {
-        return CompletableFuture.supplyAsync(() -> {
-            Tuple tuple = LINDA.take(template);
-            System.out.println("Took tuple: "+tuple);
-            return tuple;
-        }, EXECUTOR);
-    }
-
-    private void writeAfter(long ms, Tuple tuple) {
-        CompletableFuture.runAsync(() -> {
-            try {
-                Thread.sleep(ms);
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
-            LINDA.write(tuple);
-        }, EXECUTOR);
     }
 }

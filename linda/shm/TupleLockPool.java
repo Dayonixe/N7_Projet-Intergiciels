@@ -5,6 +5,7 @@ import sun.security.rsa.RSAUtil;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Random;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -52,15 +53,13 @@ public class TupleLockPool {
         return allUnlockedCallback;
     }
 
-    public CompletableFuture<Void> unlockRandom(Tuple tuple) {
+    public Optional<CompletableFuture<Void>> unlockRandom(Tuple tuple) {
         List<TupleLock> locks = this.locks.stream().filter(lock -> tuple.matches(lock.getTemplate())).collect(Collectors.toList());
         if (locks.isEmpty()) {
-            CompletableFuture<Void> callback = new CompletableFuture<>();
-            CompletableFuture.runAsync(() -> callback.complete(null));
-            return callback;
+            return Optional.empty();
         }
         TupleLock lock = locks.get(rand.nextInt(locks.size()));
-        return lock.unlock();
+        return Optional.ofNullable(lock.unlock());
     }
 
     void incrLockedCount() {

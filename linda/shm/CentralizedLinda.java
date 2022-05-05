@@ -5,6 +5,8 @@ import linda.Linda;
 import linda.Tuple;
 
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 /**
  * Shared memory implementation of Linda.
@@ -26,24 +28,36 @@ public class CentralizedLinda implements Linda {
     @Override
     // Synchronized on tuples to prevent concurrent modification
     public void write(Tuple t) {
+        Tuple add = t.deepclone();
         synchronized (tuples) {
-            tuples.add(t.deepclone());
+            tuples.add(add);
         }
 
         // Unlock all readers that match the new tuple
         readerLocks.unlockAll(t).join();
-        // Then unlock one random taker the match the new tuple
-        takerLocks.unlockRandom(t).join();
 
         // Activation des listeners read :
         synchronized (readListeners) {
-            readListeners.removeIf(l -> l.tryCall(t));
+            Set<EventListener> called = readListeners.stream().filter(l -> t.matches(l.getTemplate())).collect(Collectors.toSet());
+            called.forEach(l -> l.call(t));
+            readListeners.removeAll(called);
+        }
+
+        // Then unlock one random taker the match the new tuple
+        Optional<CompletableFuture<Void>> unlockCallback = takerLocks.unlockRandom(t);
+        if (unlockCallback.isPresent()) {
+            unlockCallback.get().join();
+            return;
         }
 
         // Activation du premier listener take qui match :
         synchronized (takeListeners) {
             takeListeners.stream().filter(l -> t.matches(l.getTemplate())).findFirst().ifPresent(listener -> {
-                listener.call(t);
+                System.out.println("Call take callback from write");
+                synchronized (tuples) {
+                    tuples.remove(add);
+                }
+                listener.call(add);
                 takeListeners.remove(listener);
             });
         }
@@ -136,9 +150,9 @@ public class CentralizedLinda implements Linda {
             // -> pas besoin de l'ajouter à la liste
             return;
         }
-        if(mode == eventMode.READ) {
+        if (mode == eventMode.READ) {
             readListeners.add(listener);
-        }else{
+        } else {
             takeListeners.add(listener);
         }
     }
@@ -147,6 +161,7 @@ public class CentralizedLinda implements Linda {
         boolean remove = listener.getMode() == eventMode.TAKE;
         Tuple tuple = get(listener.getTemplate(), remove);
         if (tuple != null) {
+            System.out.println("Immediate callback");
             listener.call(tuple);
             return true;
         }
