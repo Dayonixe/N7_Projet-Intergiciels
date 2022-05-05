@@ -28,15 +28,13 @@ public class TupleListenerPool {
         return (int) this.callbacks.stream().filter(future -> future.matches(tuple)).count();
     }
 
-    public void callAll(Tuple tuple) {
-        List<TupleListener> callbacks;
-        synchronized (this.callbacks) {
-            callbacks = this.callbacks.stream().filter(future -> future.matches(tuple)).collect(Collectors.toList());
-            List<CompletableFuture<Tuple>> futures = callbacks.stream().map(TupleListener::future).collect(Collectors.toList());
-            System.out.println("Complete them all.");
-            futures.forEach(future -> future.complete(tuple));
-            // TODO : est-ce-que allOf attend bien que les threads soient relancés ?
-            CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
+    public synchronized void callAll(Tuple tuple) {
+        List<TupleListener> callbacks = this.callbacks.stream().filter(future -> future.matches(tuple)).collect(Collectors.toList());
+        List<CompletableFuture<Tuple>> futures = callbacks.stream().map(TupleListener::future).collect(Collectors.toList());
+        System.out.println("Complete them all.");
+        futures.forEach(future -> future.complete(tuple));
+        // TODO : est-ce-que allOf attend bien que les threads soient relancés ?
+        CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
 
             /*
             OU
@@ -44,21 +42,18 @@ public class TupleListenerPool {
             futures.forEach(future -> future.complete(tuple));
             futures.join();
              */
-        }
         removeAll(callbacks);
     }
 
-    public boolean callOne(Tuple tuple) {
+    public synchronized boolean callOne(Tuple tuple) {
         Optional<TupleListener> first;
-        synchronized (callbacks) {
-            first = callbacks.stream().filter(callback -> callback.matches(tuple)).findFirst();
-            if (!first.isPresent()) {
-                return false;
-            }
-            CompletableFuture<Tuple> future = first.get().future();
-            future.complete(tuple);
-            future.join();
+        first = callbacks.stream().filter(callback -> callback.matches(tuple)).findFirst();
+        if (!first.isPresent()) {
+            return false;
         }
+        CompletableFuture<Tuple> future = first.get().future();
+        future.complete(tuple);
+        future.join();
         remove(first.get());
         return true;
     }
@@ -69,7 +64,7 @@ public class TupleListenerPool {
         for (CompletableFuture<?> cf : cfs) {
             cf.thenRun(() -> {
                 int val = count.decrementAndGet();
-                if(val == 0) {
+                if (val == 0) {
                     future.complete(null);
                 }
             });
