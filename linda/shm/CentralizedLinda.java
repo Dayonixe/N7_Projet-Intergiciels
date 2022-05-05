@@ -6,21 +6,17 @@ import linda.Tuple;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
-import java.util.stream.Collectors;
 
 /**
  * Shared memory implementation of Linda.
  */
 public class CentralizedLinda implements Linda {
-    private final TupleLockPool readerLocks = new TupleLockPool();
-    private final TupleLockPool takerLocks = new TupleLockPool();
-
     private final List<Tuple> tuples = new ArrayList<>();
 
     // Sorted by creation time
-    private final SortedSet<EventListener> readListeners = new TreeSet<>();
+    private final CallbackPool readListeners = new CallbackPool();
     // Sorted by creation time
-    private final SortedSet<EventListener> takeListeners = new TreeSet<>();
+    private final CallbackPool takeListeners = new CallbackPool();
 
     public CentralizedLinda() {
     }
@@ -28,54 +24,36 @@ public class CentralizedLinda implements Linda {
     @Override
     // Synchronized on tuples to prevent concurrent modification
     public void write(Tuple t) {
-        Tuple add = t.deepclone();
-        synchronized (tuples) {
-            tuples.add(add);
-        }
+        Tuple newTuple = t.deepclone();
 
-        // Unlock all readers that match the new tuple
-        readerLocks.unlockAll(t).join();
+        // unlock readers
+        System.out.println("Call all readers (" + readListeners.matchCount(t) + ")");
+        readListeners.callAll(t);
 
-        // Activation des listeners read :
-        synchronized (readListeners) {
-            Set<EventListener> called = readListeners.stream().filter(l -> t.matches(l.getTemplate())).collect(Collectors.toSet());
-            called.forEach(l -> l.call(t));
-            readListeners.removeAll(called);
-        }
+        // unlock takers
+        boolean taken = takeListeners.callOne(t);
+        System.out.println("Call one taker (" + taken + ")");
 
-        // Then unlock one random taker the match the new tuple
-        Optional<CompletableFuture<Void>> unlockCallback = takerLocks.unlockRandom(t);
-        if (unlockCallback.isPresent()) {
-            unlockCallback.get().join();
+        if(taken) {
             return;
         }
 
-        // Activation du premier listener take qui match :
-        synchronized (takeListeners) {
-            takeListeners.stream().filter(l -> t.matches(l.getTemplate())).findFirst().ifPresent(listener -> {
-                System.out.println("Call take callback from write");
-                synchronized (tuples) {
-                    tuples.remove(add);
-                }
-                listener.call(add);
-                takeListeners.remove(listener);
-            });
+        synchronized (tuples) {
+            tuples.add(newTuple);
         }
     }
 
     @Override
     public Tuple take(Tuple template) {
-        TupleLock lock = takerLocks.create(template);
-        Tuple tuple = getOrLock(template, true, lock);
-        lock.destroy();
-        return tuple;
+        System.out.println("Take " + template);
+        return getAsync(template, true).join();
     }
 
     @Override
     public Tuple read(Tuple template) {
-        TupleLock lock = readerLocks.create(template);
-        Tuple tuple = getOrLock(template, false, lock);
-        lock.destroy();
+        System.out.println("Before read");
+        Tuple tuple = getAsync(template, false).join();
+        System.out.println("After read");
         return tuple;
     }
 
@@ -87,6 +65,16 @@ public class CentralizedLinda implements Linda {
     @Override
     public Tuple tryRead(Tuple template) {
         return get(template, false);
+    }
+
+    @Override
+    public Collection<Tuple> takeAll(Tuple template) {
+        return getAll(template, true);
+    }
+
+    @Override
+    public Collection<Tuple> readAll(Tuple template) {
+        return getAll(template, false);
     }
 
     // Synchronized on tuples to prevent concurrent modification
@@ -104,27 +92,12 @@ public class CentralizedLinda implements Linda {
         return null;
     }
 
-    private Tuple getOrLock(Tuple template, boolean remove, TupleLock lock) {
-        do {
-            Tuple tuple = get(template, remove);
-            lock.unlocked();
-            if (tuple != null) {
-                return tuple;
-            }
-            // Attendre qu'un nouveau tuple soit soumis
-            // TODO : Optimiser en ne regardant que le dernier tuple (celui venant d'être ajouté) ?
-            lock.lock();
-        } while (true);
-    }
-
-    @Override
-    public Collection<Tuple> takeAll(Tuple template) {
-        return getAll(template, true);
-    }
-
-    @Override
-    public Collection<Tuple> readAll(Tuple template) {
-        return getAll(template, false);
+    private CompletableFuture<Tuple> getAsync(Tuple template, boolean remove) {
+        eventMode mode = remove ? eventMode.TAKE : eventMode.READ;
+        eventTiming timing = eventTiming.IMMEDIATE;
+        CompletableFuture<Tuple> future = new CompletableFuture<>();
+        eventRegister(mode, timing, template, future::complete);
+        return future;
     }
 
     public synchronized Collection<Tuple> getAll(Tuple template, boolean remove) {
@@ -144,28 +117,29 @@ public class CentralizedLinda implements Linda {
 
     @Override
     public synchronized void eventRegister(eventMode mode, eventTiming timing, Tuple template, Callback callback) {
-        EventListener listener = new EventListener(template, mode, timing, callback);
-        if (timing == eventTiming.IMMEDIATE && tryListener(listener)) {
-            // Si on est en mode immédiat et que le listener est parvenu à récupérer un tuple
-            // -> pas besoin de l'ajouter à la liste
-            return;
+        if (timing == eventTiming.IMMEDIATE) {
+            Tuple tuple;
+            if (mode == eventMode.READ) {
+                tuple = tryRead(template);
+            } else {
+                tuple = tryTake(template);
+            }
+            if (tuple != null) {
+                System.out.println("Immediate call");
+                // Si on est en mode immédiat et que le listener est parvenu à récupérer un tuple
+                // -> pas besoin de l'ajouter à la liste
+                callback.call(tuple);
+                return;
+            }
         }
-        if (mode == eventMode.READ) {
-            readListeners.add(listener);
-        } else {
-            takeListeners.add(listener);
-        }
-    }
+//        CompletableFuture<Tuple> completableFuture = new CompletableFuture<>();
+//        completableFuture.thenAccept(callback::call);
 
-    private boolean tryListener(EventListener listener) {
-        boolean remove = listener.getMode() == eventMode.TAKE;
-        Tuple tuple = get(listener.getTemplate(), remove);
-        if (tuple != null) {
-            System.out.println("Immediate callback");
-            listener.call(tuple);
-            return true;
+        if (mode == eventMode.READ) {
+            readListeners.add(new FutureTuple(template, callback));
+        } else {
+            takeListeners.add(new FutureTuple(template, callback));
         }
-        return false;
     }
 
     @Override

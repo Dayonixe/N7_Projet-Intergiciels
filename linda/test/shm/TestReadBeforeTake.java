@@ -15,11 +15,6 @@ import static org.junit.Assert.assertNull;
 
 @RunWith(Parameterized.class)
 public class TestReadBeforeTake extends TestSHM {
-    @Parameterized.Parameters
-    public static Object[][] data() {
-        return new Object[5][0];
-    }
-
     @Test
     public void test() throws InterruptedException, ExecutionException {
         Tuple template = new Tuple(Integer.class, String.class);
