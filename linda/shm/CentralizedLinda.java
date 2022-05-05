@@ -11,8 +11,8 @@ import java.util.stream.Collectors;
  * Shared memory implementation of Linda.
  */
 public class CentralizedLinda implements Linda {
-    private final LockPool readerLocks = new LockPool();
-    private final LockPool takerLocks = new LockPool();
+    private final TupleLockPool readerLocks = new TupleLockPool();
+    private final TupleLockPool takerLocks = new TupleLockPool();
 
     private final List<Tuple> tuples = new ArrayList<>();
     private final Set<EventListener> listeners = new HashSet<>();
@@ -22,22 +22,26 @@ public class CentralizedLinda implements Linda {
 
     @Override
     // Synchronized on tuples to prevent concurrent modification
-    public synchronized void write(Tuple t) {
-        tuples.add(t.deepclone());
+    public void write(Tuple t) {
+        synchronized (tuples) {
+            tuples.add(t.deepclone());
+        }
 
-        // Unlock all readers
-        readerLocks.unlockAll()
-                // Then unlock all takers
-                .thenRun(takerLocks::unlockAll);
+        // Unlock all readers that match the new tuple
+        readerLocks.unlockAll(t).join();
+        // Then unlock one random taker the match the new tuple
+        takerLocks.unlockRandom(t).join();
 
-        listeners.stream().filter(l -> t.matches(l.getTemplate()))
-                // intermediate list to prevent concurrent modification on tuples by tryListener
-                .collect(Collectors.toList()).forEach(this::tryListener);
+        synchronized (tuples) {
+            listeners.stream().filter(l -> t.matches(l.getTemplate()))
+                    // intermediate list to prevent concurrent modification on tuples by tryListener
+                    .collect(Collectors.toList()).forEach(this::tryListener);
+        }
     }
 
     @Override
     public Tuple take(Tuple template) {
-        Lock lock = takerLocks.create();
+        TupleLock lock = takerLocks.create(template);
         Tuple tuple = getOrLock(template, true, lock);
         lock.destroy();
         return tuple;
@@ -45,7 +49,7 @@ public class CentralizedLinda implements Linda {
 
     @Override
     public Tuple read(Tuple template) {
-        Lock lock = readerLocks.create();
+        TupleLock lock = readerLocks.create(template);
         Tuple tuple = getOrLock(template, false, lock);
         lock.destroy();
         return tuple;
@@ -76,7 +80,7 @@ public class CentralizedLinda implements Linda {
         return null;
     }
 
-    private Tuple getOrLock(Tuple template, boolean remove, Lock lock) {
+    private Tuple getOrLock(Tuple template, boolean remove, TupleLock lock) {
         do {
             Tuple tuple = get(template, remove);
             lock.unlocked();

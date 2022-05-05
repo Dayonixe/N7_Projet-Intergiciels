@@ -1,16 +1,22 @@
 package linda.shm;
 
+import linda.Tuple;
+
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Semaphore;
 
-public class Lock {
+public class TupleLock {
+    private final TupleLockPool lockPool;
+    private final Tuple template;
+
+    private CompletableFuture<Void> unlockedCallback;
+
     private final Semaphore semaphore = new Semaphore(0);
-
-    private final LockPool lockPool;
-
     private boolean wasLocked = false;
 
-    public Lock(LockPool lockPool) {
+    public TupleLock(TupleLockPool lockPool, Tuple template) {
         this.lockPool = lockPool;
+        this.template = template;
     }
 
     public void lock() {
@@ -23,8 +29,10 @@ public class Lock {
         }
     }
 
-    public void unlock() {
+    public CompletableFuture<Void> unlock() {
+        unlockedCallback = new CompletableFuture<>();
         semaphore.release();
+        return unlockedCallback;
     }
 
     /**
@@ -36,9 +44,14 @@ public class Lock {
         }
         lockPool.decrLockedCount();
         wasLocked = false;
+        unlockedCallback.complete(null);
     }
 
     public void destroy() {
         lockPool.destroy(this);
+    }
+
+    public Tuple getTemplate() {
+        return template;
     }
 }
