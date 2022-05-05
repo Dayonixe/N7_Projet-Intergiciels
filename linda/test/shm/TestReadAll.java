@@ -27,22 +27,8 @@ public class TestReadAll extends TestSHM {
 
         System.out.println("Written");
 
-        CompletableFuture<Void> writer = CompletableFuture.runAsync(() -> {
-            writeAfter(0, new Tuple(2, 9));
-            writeAfter(0, new Tuple(2, 9));
-            writeAfter(0, new Tuple(2, 9));
-            writeAfter(0, new Tuple(2, 9));
-            writeAfter(0, new Tuple(2, 9));
-        });
-
-        CompletableFuture<Collection<Tuple>> trucs = CompletableFuture.supplyAsync(() -> LINDA.readAll(template));
-
-        CompletableFuture<Void> future = CompletableFuture.allOf(writer, trucs);
-
         Collection<Tuple> tuples = LINDA.readAll(template);
         Collection<Tuple> tuples2 = LINDA.readAll(template);
-
-        System.out.println("trucs "+trucs.get());
 
         LINDA.write(new Tuple(3, 9));
 

@@ -12,7 +12,7 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
 @RunWith(Parameterized.class)
-public class TestSHM {
+public abstract class TestSHM {
     @Parameterized.Parameters
     public static Object[][] data() {
         return new Object[10][0];

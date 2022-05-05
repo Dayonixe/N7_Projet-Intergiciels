@@ -14,33 +14,33 @@ public class CentralizedLinda implements Linda {
     private final List<Tuple> tuples = new ArrayList<>();
 
     // Sorted by creation time
-    private final CallbackPool readListeners = new CallbackPool();
+    private final TupleListenerPool readers = new TupleListenerPool();
     // Sorted by creation time
-    private final CallbackPool takeListeners = new CallbackPool();
+    private final TupleListenerPool takers = new TupleListenerPool();
 
     public CentralizedLinda() {
     }
 
     @Override
     // Synchronized on tuples to prevent concurrent modification
-    public void write(Tuple t) {
+    public synchronized void write(Tuple t) {
         Tuple newTuple = t.deepclone();
 
         // unlock readers
-        System.out.println("Call all readers (" + readListeners.matchCount(t) + ")");
-        readListeners.callAll(t);
+        System.out.println("Call all readers (" + readers.matchCount(t) + ")");
+        // TODO: interblocage si call et add en même temps ?
+        readers.callAll(t);
 
         // unlock takers
-        boolean taken = takeListeners.callOne(t);
+        boolean taken = takers.callOne(t);
         System.out.println("Call one taker (" + taken + ")");
 
         if(taken) {
             return;
         }
 
-        synchronized (tuples) {
-            tuples.add(newTuple);
-        }
+        // TODO : Ou ne synchroniser que les tuples à cet endroit ?
+        tuples.add(newTuple);
     }
 
     @Override
@@ -136,9 +136,9 @@ public class CentralizedLinda implements Linda {
 //        completableFuture.thenAccept(callback::call);
 
         if (mode == eventMode.READ) {
-            readListeners.add(new FutureTuple(template, callback));
+            readers.add(new TupleListener(template, callback));
         } else {
-            takeListeners.add(new FutureTuple(template, callback));
+            takers.add(new TupleListener(template, callback));
         }
     }
 

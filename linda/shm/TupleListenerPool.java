@@ -9,21 +9,18 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
-public class CallbackPool {
-    private final List<FutureTuple> callbacks = new ArrayList<>();
+public class TupleListenerPool {
+    private final List<TupleListener> callbacks = new ArrayList<>();
 
-    public CallbackPool() {
-    }
-
-    public synchronized void add(FutureTuple callback) {
+    public synchronized void add(TupleListener callback) {
         this.callbacks.add(callback);
     }
 
-    public synchronized void removeAll(List<FutureTuple> callbacks) {
+    public synchronized void removeAll(List<TupleListener> callbacks) {
         this.callbacks.removeAll(callbacks);
     }
 
-    public synchronized void remove(FutureTuple callback) {
+    public synchronized void remove(TupleListener callback) {
         this.callbacks.remove(callback);
     }
 
@@ -32,10 +29,10 @@ public class CallbackPool {
     }
 
     public void callAll(Tuple tuple) {
-        List<FutureTuple> callbacks;
+        List<TupleListener> callbacks;
         synchronized (this.callbacks) {
             callbacks = this.callbacks.stream().filter(future -> future.matches(tuple)).collect(Collectors.toList());
-            List<CompletableFuture<Tuple>> futures = callbacks.stream().map(FutureTuple::future).collect(Collectors.toList());
+            List<CompletableFuture<Tuple>> futures = callbacks.stream().map(TupleListener::future).collect(Collectors.toList());
             System.out.println("Complete them all.");
             futures.forEach(future -> future.complete(tuple));
             // TODO : est-ce-que allOf attend bien que les threads soient relancés ?
@@ -52,7 +49,7 @@ public class CallbackPool {
     }
 
     public boolean callOne(Tuple tuple) {
-        Optional<FutureTuple> first;
+        Optional<TupleListener> first;
         synchronized (callbacks) {
             first = callbacks.stream().filter(callback -> callback.matches(tuple)).findFirst();
             if (!first.isPresent()) {
