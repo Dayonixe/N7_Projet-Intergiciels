@@ -14,10 +14,8 @@ import java.util.stream.Collectors;
 public class CentralizedLinda implements Linda {
     private final List<Tuple> tuples = new ArrayList<>();
 
-    // Sorted by creation time
-    private final TupleListenerPool readers = new TupleListenerPool();
-    // Sorted by creation time
-    private final TupleListenerPool takers = new TupleListenerPool();
+    private final TupleCallbackManager readers = new TupleCallbackManager();
+    private final TupleCallbackManager takers = new TupleCallbackManager();
 
     public CentralizedLinda() {
     }
@@ -28,7 +26,7 @@ public class CentralizedLinda implements Linda {
 
         // unlock readers
         System.out.println("Call all readers (" + readers.matchCount(t) + ")");
-        // TODO: interblocage si call et add en même temps ?
+
         readers.callAll(t);
 
         // unlock one taker
@@ -119,9 +117,9 @@ public class CentralizedLinda implements Linda {
         }
 
         if (mode == eventMode.READ) {
-            readers.add(new TupleListener(template, callback));
+            readers.add(new TupleCallback(template, callback));
         } else {
-            takers.add(new TupleListener(template, callback));
+            takers.add(new TupleCallback(template, callback));
         }
     }
 
