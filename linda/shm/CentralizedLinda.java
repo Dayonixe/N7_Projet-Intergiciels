@@ -118,12 +118,8 @@ public class CentralizedLinda implements Linda {
     @Override
     public synchronized void eventRegister(eventMode mode, eventTiming timing, Tuple template, Callback callback) {
         if (timing == eventTiming.IMMEDIATE) {
-            Tuple tuple;
-            if (mode == eventMode.READ) {
-                tuple = tryRead(template);
-            } else {
-                tuple = tryTake(template);
-            }
+            Tuple tuple = get(template, mode == eventMode.TAKE);
+
             if (tuple != null) {
                 System.out.println("Immediate call");
                 // Si on est en mode immédiat et que le listener est parvenu à récupérer un tuple
@@ -132,8 +128,6 @@ public class CentralizedLinda implements Linda {
                 return;
             }
         }
-//        CompletableFuture<Tuple> completableFuture = new CompletableFuture<>();
-//        completableFuture.thenAccept(callback::call);
 
         if (mode == eventMode.READ) {
             readers.add(new TupleListener(template, callback));
