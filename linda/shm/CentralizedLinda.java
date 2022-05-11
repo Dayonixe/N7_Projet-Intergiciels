@@ -6,6 +6,7 @@ import linda.Tuple;
 
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 /**
  * Shared memory implementation of Linda.
@@ -22,7 +23,6 @@ public class CentralizedLinda implements Linda {
     }
 
     @Override
-    // Synchronized on tuples to prevent concurrent modification
     public synchronized void write(Tuple t) {
         Tuple newTuple = t.deepclone();
 
@@ -31,7 +31,7 @@ public class CentralizedLinda implements Linda {
         // TODO: interblocage si call et add en même temps ?
         readers.callAll(t);
 
-        // unlock takers
+        // unlock one taker
         boolean taken = takers.callOne(t);
         System.out.println("Call one taker (" + taken + ")");
 
@@ -39,7 +39,6 @@ public class CentralizedLinda implements Linda {
             return;
         }
 
-        // TODO : Ou ne synchroniser que les tuples à cet endroit ?
         tuples.add(newTuple);
     }
 
@@ -77,19 +76,15 @@ public class CentralizedLinda implements Linda {
         return getAll(template, false);
     }
 
-    // Synchronized on tuples to prevent concurrent modification
     private synchronized Tuple get(Tuple template, boolean remove) {
-        Iterator<Tuple> iterator = tuples.iterator();
-        while (iterator.hasNext()) {
-            Tuple tuple = iterator.next();
-            if (tuple.matches(template)) {
-                if (remove) {
-                    iterator.remove();
-                }
-                return tuple;
-            }
+        Optional<Tuple> tuple = this.tuples.stream().filter(t -> t.matches(template)).findFirst();
+        if(!tuple.isPresent()) {
+            return null;
         }
-        return null;
+        if(remove) {
+            this.tuples.remove(tuple.get());
+        }
+        return tuple.get();
     }
 
     private CompletableFuture<Tuple> getAsync(Tuple template, boolean remove) {
@@ -101,16 +96,10 @@ public class CentralizedLinda implements Linda {
     }
 
     public synchronized Collection<Tuple> getAll(Tuple template, boolean remove) {
-        Set<Tuple> tuples = new HashSet<>();
-        Iterator<Tuple> iterator = this.tuples.iterator();
-        while (iterator.hasNext()) {
-            Tuple tuple = iterator.next();
-            if (tuple.matches(template)) {
-                if (remove) {
-                    iterator.remove();
-                }
-                tuples.add(tuple);
-            }
+        List<Tuple> tuples = this.tuples.stream()
+                .filter(t -> t.matches(template)).collect(Collectors.toList());
+        if(remove) {
+            this.tuples.removeAll(tuples);
         }
         return tuples;
     }

@@ -33,7 +33,7 @@ public class TupleListenerPool {
         List<TupleListener> callbacks = this.callbacks.stream().filter(future -> future.matches(tuple)).collect(Collectors.toList());
         List<CompletableFuture<Tuple>> futures = callbacks.stream().map(TupleListener::future).collect(Collectors.toList());
         futures.forEach(future -> future.complete(tuple));
-        // TODO : est-ce-que allOf attend bien que les threads soient relancés ?
+
         CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
 
         removeAll(callbacks);
