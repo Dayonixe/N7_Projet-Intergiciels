@@ -4,6 +4,8 @@ import linda.Callback;
 import linda.Linda;
 import linda.Tuple;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
 import java.rmi.registry.LocateRegistry;
@@ -22,9 +24,10 @@ public class LindaClient implements Linda {
     public LindaClient(String serverURI) {
         Registry dns;
         try {
-            dns = LocateRegistry.getRegistry("localhost", 4000);
-            remote = (ILindaServer)dns.lookup(serverURI);
-        } catch (RemoteException | NotBoundException e) {
+            URI uri = new URI(serverURI);
+            dns = LocateRegistry.getRegistry(uri.getHost(), uri.getPort());
+            remote = (ILindaServer)dns.lookup(uri.getPath());
+        } catch (RemoteException | NotBoundException | URISyntaxException e) {
             throw new RuntimeException(e);
         }
     }

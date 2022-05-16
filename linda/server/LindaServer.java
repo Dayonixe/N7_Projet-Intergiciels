@@ -5,13 +5,23 @@ import linda.Linda;
 import linda.Tuple;
 import linda.shm.CentralizedLinda;
 
+import java.io.*;
 import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 
 public class LindaServer extends UnicastRemoteObject implements ILindaServer {
-    private final CentralizedLinda linda = new CentralizedLinda();
-    public LindaServer() throws RemoteException {
+    private final File saveFile;
+    private final CentralizedLinda linda;
+    public LindaServer(File saveFile) throws RemoteException {
+        this.saveFile = saveFile;
+        List<Tuple> tuples = new ArrayList<>();
+        if(this.saveFile.exists()) {
+            tuples = load();
+        }
+        this.linda = new CentralizedLinda(tuples);
     }
 
     @Override
@@ -60,4 +70,36 @@ public class LindaServer extends UnicastRemoteObject implements ILindaServer {
         };
         linda.eventRegister(mode, timing, template, callback);
     }
+
+    private List<Tuple> load() {
+        try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(saveFile))) {
+            return (List<Tuple>) ois.readObject();
+        } catch (IOException | ClassNotFoundException e) {
+            e.printStackTrace();
+        }
+        System.err.println("Invalid save file.");
+        return new ArrayList<>();
+    }
+
+    public void save() {
+        if(!saveFile.exists()) {
+            try {
+                saveFile.createNewFile();
+            } catch (IOException e) {
+                System.err.println("Could not create save file.");
+                throw new RuntimeException(e);
+            }
+        }
+        try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(saveFile))) {
+            oos.writeObject(linda.getTuples());
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        System.err.println("Invalid save file.");
+    }
+
+    public void shutdown() {
+        save();
+    }
+
 }
