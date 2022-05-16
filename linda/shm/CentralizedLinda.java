@@ -133,7 +133,7 @@ public class CentralizedLinda implements Linda {
 
     }
 
-    public List<Tuple> getTuples() {
-        return Collections.unmodifiableList(tuples);
+    public synchronized List<Tuple> getTuples() {
+        return new ArrayList<>(tuples);
     }
 }

@@ -1,6 +1,5 @@
 package linda.server;
 
-import linda.Callback;
 import linda.Linda;
 import linda.Tuple;
 
@@ -23,5 +22,5 @@ interface ILindaServer extends Remote {
 
     Collection<Tuple> readAll(Tuple template) throws RemoteException;
 
-    void eventRegister(Linda.eventMode mode, Linda.eventTiming timing, Tuple template, RemoteCallback callback) throws RemoteException;
+    void eventRegister(Linda.eventMode mode, Linda.eventTiming timing, Tuple template, IRemoteCallback callback) throws RemoteException;
 }

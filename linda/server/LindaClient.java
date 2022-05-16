@@ -4,6 +4,7 @@ import linda.Callback;
 import linda.Linda;
 import linda.Tuple;
 
+import java.net.MalformedURLException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.rmi.NotBoundException;
@@ -25,8 +26,11 @@ public class LindaClient implements Linda {
         Registry dns;
         try {
             URI uri = new URI(serverURI);
+            if(!(uri.getScheme() == null || uri.getScheme().equalsIgnoreCase("rmi"))) {
+                throw new URISyntaxException(serverURI, "Invalid scheme. Expected rmi or nothing.");
+            }
             dns = LocateRegistry.getRegistry(uri.getHost(), uri.getPort());
-            remote = (ILindaServer)dns.lookup(uri.getPath());
+            remote = (ILindaServer)dns.lookup(uri.getPath().substring(1));
         } catch (RemoteException | NotBoundException | URISyntaxException e) {
             throw new RuntimeException(e);
         }
@@ -98,7 +102,7 @@ public class LindaClient implements Linda {
     @Override
     public void eventRegister(eventMode mode, eventTiming timing, Tuple template, Callback callback) {
         try {
-            RemoteCallback remoteCallback = new RemoteCallback(callback);
+            IRemoteCallback remoteCallback = new RemoteCallback(callback);
             remote.eventRegister(mode, timing, template, remoteCallback);
         } catch (RemoteException e) {
             throw new RuntimeException(e);
