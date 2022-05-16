@@ -9,7 +9,15 @@ import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
 public class TupleCallbackManager {
-    private final List<TupleCallback> callbacks = new ArrayList<>();
+    private final List<TupleCallback> callbacks;
+
+    public TupleCallbackManager() {
+        this(new ArrayList<>());
+    }
+
+    public TupleCallbackManager(List<TupleCallback> callbacks) {
+        this.callbacks = callbacks;
+    }
 
     public synchronized void add(TupleCallback callback) {
         this.callbacks.add(callback);
@@ -21,6 +29,10 @@ public class TupleCallbackManager {
 
     public synchronized void remove(TupleCallback callback) {
         this.callbacks.remove(callback);
+    }
+
+    public synchronized List<TupleCallback> getAll() {
+        return this.callbacks;
     }
 
     public synchronized int matchCount(Tuple tuple) {

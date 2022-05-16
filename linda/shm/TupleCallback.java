@@ -6,7 +6,8 @@ import linda.Tuple;
 import java.util.concurrent.CompletableFuture;
 
 public class TupleCallback extends CompletableFuture<Tuple> {
-    private final Tuple template;
+    public final Tuple template;
+    public final Callback callback;
 
     /**
      *
@@ -16,6 +17,7 @@ public class TupleCallback extends CompletableFuture<Tuple> {
     public TupleCallback(Tuple template, Callback callback) {
         this.thenAccept(callback::call);
         this.template = template;
+        this.callback = callback;
     }
 
     public boolean matches(Tuple t) {

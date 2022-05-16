@@ -7,7 +7,7 @@ import java.rmi.Remote;
 import java.rmi.RemoteException;
 import java.util.Collection;
 
-interface ILindaServer extends Remote {
+public interface ILindaServer extends Remote {
     void write(Tuple t) throws RemoteException;
 
     Tuple take(Tuple template) throws RemoteException;
@@ -23,4 +23,8 @@ interface ILindaServer extends Remote {
     Collection<Tuple> readAll(Tuple template) throws RemoteException;
 
     void eventRegister(Linda.eventMode mode, Linda.eventTiming timing, Tuple template, IRemoteCallback callback) throws RemoteException;
+
+    String getBackupAddress() throws RemoteException;
+
+    void receiveBackup(LindaBackup backup) throws RemoteException;
 }

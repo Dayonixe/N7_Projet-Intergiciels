@@ -17,23 +17,35 @@ import java.util.Collection;
  * It implements the Linda interface and propagates everything to the server it is connected to.
  * */
 public class LindaClient implements Linda {
-	private final ILindaServer remote;
+	private ILindaServer remote;
+    private String backupServerAddress;
 
     /** Initializes the Linda implementation.
      *  @param serverURI the URI of the server, e.g. "rmi://localhost:4000/LindaServer" or "//localhost:4000/LindaServer".
      */
     public LindaClient(String serverURI) {
-        Registry dns;
+        connect(serverURI);
+    }
+
+    private void connect(String serverURI) {
         try {
             URI uri = new URI(serverURI);
             if(!(uri.getScheme() == null || uri.getScheme().equalsIgnoreCase("rmi"))) {
                 throw new URISyntaxException(serverURI, "Invalid scheme. Expected rmi or nothing.");
             }
-            dns = LocateRegistry.getRegistry(uri.getHost(), uri.getPort());
+            Registry dns = LocateRegistry.getRegistry(uri.getHost(), uri.getPort());
             remote = (ILindaServer)dns.lookup(uri.getPath().substring(1));
+            backupServerAddress = remote.getBackupAddress();
         } catch (RemoteException | NotBoundException | URISyntaxException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    private void switchToBackup() {
+        if(backupServerAddress == null) {
+            throw new RuntimeException("No backup server available.");
+        }
+        connect(backupServerAddress);
     }
 
     @Override
@@ -41,7 +53,8 @@ public class LindaClient implements Linda {
         try {
             remote.write(t);
         } catch (RemoteException e) {
-            throw new RuntimeException(e);
+            switchToBackup();
+            write(t);
         }
     }
 
@@ -50,7 +63,8 @@ public class LindaClient implements Linda {
         try {
             return remote.take(template);
         } catch (RemoteException e) {
-            throw new RuntimeException(e);
+            switchToBackup();
+            return take(template);
         }
     }
 
@@ -59,7 +73,8 @@ public class LindaClient implements Linda {
         try {
             return remote.read(template);
         } catch (RemoteException e) {
-            throw new RuntimeException(e);
+            switchToBackup();
+            return read(template);
         }
     }
 
@@ -68,7 +83,8 @@ public class LindaClient implements Linda {
         try {
             return remote.tryTake(template);
         } catch (RemoteException e) {
-            throw new RuntimeException(e);
+            switchToBackup();
+            return tryTake(template);
         }
     }
 
@@ -77,7 +93,8 @@ public class LindaClient implements Linda {
         try {
             return remote.tryRead(template);
         } catch (RemoteException e) {
-            throw new RuntimeException(e);
+            switchToBackup();
+            return tryRead(template);
         }
     }
 
@@ -86,7 +103,8 @@ public class LindaClient implements Linda {
         try {
             return remote.takeAll(template);
         } catch (RemoteException e) {
-            throw new RuntimeException(e);
+            switchToBackup();
+            return takeAll(template);
         }
     }
 
@@ -95,7 +113,8 @@ public class LindaClient implements Linda {
         try {
             return remote.readAll(template);
         } catch (RemoteException e) {
-            throw new RuntimeException(e);
+            switchToBackup();
+            return readAll(template);
         }
     }
 
@@ -105,7 +124,8 @@ public class LindaClient implements Linda {
             IRemoteCallback remoteCallback = new RemoteCallback(callback);
             remote.eventRegister(mode, timing, template, remoteCallback);
         } catch (RemoteException e) {
-            throw new RuntimeException(e);
+            switchToBackup();
+            eventRegister(mode, timing, template, callback);
         }
     }
 

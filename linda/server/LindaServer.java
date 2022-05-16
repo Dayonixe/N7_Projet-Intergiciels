@@ -4,24 +4,45 @@ import linda.Callback;
 import linda.Linda;
 import linda.Tuple;
 import linda.shm.CentralizedLinda;
+import linda.shm.TupleCallbackManager;
 
 import java.io.*;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.rmi.NotBoundException;
 import java.rmi.RemoteException;
+import java.rmi.registry.LocateRegistry;
+import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
+import java.util.*;
 
 public class LindaServer extends UnicastRemoteObject implements ILindaServer {
     private final File saveFile;
-    private final CentralizedLinda linda;
+    private CentralizedLinda linda;
+
+    private final String backupURI;
+
+    private ILindaServer backup;
+
     public LindaServer(File saveFile) throws RemoteException {
+        this(saveFile, null);
+    }
+
+    public LindaServer(File saveFile, String backupURI) throws RemoteException {
         this.saveFile = saveFile;
         List<Tuple> tuples = new ArrayList<>();
-        if(this.saveFile.exists()) {
+        if (this.saveFile.exists()) {
             tuples = load();
         }
         this.linda = new CentralizedLinda(tuples);
+        this.backupURI = backupURI;
+        if (this.backupURI != null) {
+            connectBackup();
+            scheduleBackup();
+            System.out.println("Linda server started with backup " + backupURI + ".");
+        } else {
+            System.out.println("Linda server started without backup.");
+        }
     }
 
     @Override
@@ -82,7 +103,7 @@ public class LindaServer extends UnicastRemoteObject implements ILindaServer {
     }
 
     public void save() {
-        if(!saveFile.exists()) {
+        if (!saveFile.exists()) {
             try {
                 saveFile.createNewFile();
             } catch (IOException e) {
@@ -95,11 +116,55 @@ public class LindaServer extends UnicastRemoteObject implements ILindaServer {
         } catch (IOException e) {
             e.printStackTrace();
         }
-        System.err.println("Invalid save file.");
     }
 
     public void shutdown() {
         save();
     }
 
+    @Override
+    public String getBackupAddress() throws RemoteException {
+        return backupURI;
+    }
+
+    private void scheduleBackup() {
+        new Timer().schedule(new TimerTask() {
+            @Override
+            public void run() {
+                sendBackup();
+                save();
+            }
+        }, 0L, 5000L);
+    }
+
+    private void sendBackup() {
+        if (backup != null) {
+            try {
+                backup.receiveBackup(new LindaBackup(linda.tuples, linda.readers, linda.takers));
+            } catch (RemoteException e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+
+    public void receiveBackup(LindaBackup backup) throws RemoteException {
+        System.out.println("Received backup : " + backup);
+        System.out.println("with "+backup.toReadCallbacks().size()+" read callbacks.");
+        this.linda = new CentralizedLinda(backup.tuples,
+                new TupleCallbackManager(backup.toReadCallbacks()),
+                new TupleCallbackManager(backup.toTakeCallbacks()));
+    }
+
+    private void connectBackup() {
+        try {
+            URI uri = new URI(backupURI);
+            if (!(uri.getScheme() == null || uri.getScheme().equalsIgnoreCase("rmi"))) {
+                throw new URISyntaxException(backupURI, "Invalid scheme. Expected rmi or nothing.");
+            }
+            Registry dns = LocateRegistry.getRegistry(uri.getHost(), uri.getPort());
+            backup = (ILindaServer) dns.lookup(uri.getPath().substring(1));
+        } catch (RemoteException | NotBoundException | URISyntaxException e) {
+            throw new RuntimeException(e);
+        }
+    }
 }

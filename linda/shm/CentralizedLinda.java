@@ -12,17 +12,23 @@ import java.util.stream.Collectors;
  * Shared memory implementation of Linda.
  */
 public class CentralizedLinda implements Linda {
-    private final List<Tuple> tuples;
+    public final List<Tuple> tuples;
 
-    private final TupleCallbackManager readers = new TupleCallbackManager();
-    private final TupleCallbackManager takers = new TupleCallbackManager();
+    public TupleCallbackManager readers;
+    public TupleCallbackManager takers;
 
     public CentralizedLinda() {
         this(new ArrayList<>());
     }
 
-    public CentralizedLinda(List<Tuple> initialState) {
-        this.tuples = initialState;
+    public CentralizedLinda(List<Tuple> tuples) {
+        this(tuples, new TupleCallbackManager(), new TupleCallbackManager());
+    }
+
+    public CentralizedLinda(List<Tuple> tuples, TupleCallbackManager readers, TupleCallbackManager takers) {
+        this.tuples = tuples;
+        this.readers = readers;
+        this.takers = takers;
     }
 
     @Override
@@ -135,5 +141,10 @@ public class CentralizedLinda implements Linda {
 
     public synchronized List<Tuple> getTuples() {
         return new ArrayList<>(tuples);
+    }
+
+    public synchronized void setTuples(List<Tuple> tuples) {
+        this.tuples.clear();
+        this.tuples.addAll(tuples);
     }
 }
