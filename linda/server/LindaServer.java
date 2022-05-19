@@ -4,7 +4,6 @@ import linda.Callback;
 import linda.Linda;
 import linda.Tuple;
 import linda.shm.CentralizedLinda;
-import linda.shm.TupleCallbackManager;
 
 import java.io.*;
 import java.net.URI;
@@ -22,7 +21,8 @@ public class LindaServer extends UnicastRemoteObject implements ILindaServer {
 
     private final String backupURI;
 
-    private ILindaServer backup;
+    private ILindaServer backupServer;
+    private final LindaBackup backup;
 
     public LindaServer(File saveFile) throws RemoteException {
         this(saveFile, null);
@@ -34,6 +34,7 @@ public class LindaServer extends UnicastRemoteObject implements ILindaServer {
         if (this.saveFile.exists()) {
             tuples = load();
         }
+        this.backup = new LindaBackup(tuples);
         this.linda = new CentralizedLinda(tuples);
         this.backupURI = backupURI;
         if (this.backupURI != null) {
@@ -82,14 +83,21 @@ public class LindaServer extends UnicastRemoteObject implements ILindaServer {
 
     @Override
     public void eventRegister(Linda.eventMode mode, Linda.eventTiming timing, Tuple template, IRemoteCallback remoteCallback) throws RemoteException {
-        Callback callback = t -> {
-            try {
-                remoteCallback.call(t);
-            } catch (RemoteException e) {
-                throw new RuntimeException(e);
-            }
-        };
-        linda.eventRegister(mode, timing, template, callback);
+        List<TupleCallbackBackup> callbacks = mode == Linda.eventMode.TAKE ? backup.takers() : backup.readers();
+        TupleCallbackBackup callbackup = new TupleCallbackBackup(template, remoteCallback);
+        synchronized (callbacks) {
+            Callback callback = t -> {
+                try {
+                    remoteCallback.call(t);
+                    synchronized (callbacks) {
+                        callbacks.remove(callbackup);
+                    }
+                } catch (RemoteException e) {
+                    throw new RuntimeException(e);
+                }
+            };
+            linda.eventRegister(mode, timing, template, callback);
+        }
     }
 
     private List<Tuple> load() {
@@ -138,9 +146,11 @@ public class LindaServer extends UnicastRemoteObject implements ILindaServer {
     }
 
     private void sendBackup() {
-        if (backup != null) {
+        if (backupServer != null) {
             try {
-                backup.receiveBackup(new LindaBackup(linda.tuples, linda.readers, linda.takers));
+                // Pb : création remote callback côté serveur principal
+                // Donc si le serveur est down les callbacks aussi
+                backupServer.receiveBackup(backup);
             } catch (RemoteException e) {
                 throw new RuntimeException(e);
             }
@@ -149,10 +159,8 @@ public class LindaServer extends UnicastRemoteObject implements ILindaServer {
 
     public void receiveBackup(LindaBackup backup) throws RemoteException {
         System.out.println("Received backup : " + backup);
-        System.out.println("with "+backup.toReadCallbacks().size()+" read callbacks.");
-        this.linda = new CentralizedLinda(backup.tuples,
-                new TupleCallbackManager(backup.toReadCallbacks()),
-                new TupleCallbackManager(backup.toTakeCallbacks()));
+        System.out.println("with " + backup.readers().size() + " read callbacks.");
+        this.linda = new CentralizedLinda(backup.tuples(), backup.readersManager(), backup.takersManager());
     }
 
     private void connectBackup() {
@@ -162,7 +170,7 @@ public class LindaServer extends UnicastRemoteObject implements ILindaServer {
                 throw new URISyntaxException(backupURI, "Invalid scheme. Expected rmi or nothing.");
             }
             Registry dns = LocateRegistry.getRegistry(uri.getHost(), uri.getPort());
-            backup = (ILindaServer) dns.lookup(uri.getPath().substring(1));
+            backupServer = (ILindaServer) dns.lookup(uri.getPath().substring(1));
         } catch (RemoteException | NotBoundException | URISyntaxException e) {
             throw new RuntimeException(e);
         }

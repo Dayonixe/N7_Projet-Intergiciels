@@ -7,7 +7,7 @@ import java.util.concurrent.CompletableFuture;
 
 public class TupleCallback extends CompletableFuture<Tuple> {
     public final Tuple template;
-    public final Callback callback;
+    public final transient Callback callback;
 
     /**
      *
