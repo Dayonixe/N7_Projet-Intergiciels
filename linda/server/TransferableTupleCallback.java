@@ -1,17 +1,16 @@
 package linda.server;
 
-import linda.Callback;
 import linda.Tuple;
 import linda.shm.TupleCallback;
 
 import java.io.Serializable;
 import java.rmi.RemoteException;
 
-public class TupleCallbackBackup implements Serializable {
+public class TransferableTupleCallback implements Serializable {
     private final Tuple template;
     private final IRemoteCallback callback;
 
-    public TupleCallbackBackup(Tuple template, IRemoteCallback callback) {
+    public TransferableTupleCallback(Tuple template, IRemoteCallback callback) {
         this.template = template;
         this.callback = callback;
     }

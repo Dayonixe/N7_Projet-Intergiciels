@@ -23,7 +23,7 @@ public class LindaServer extends UnicastRemoteObject implements ILindaServer {
     private final String backupURI;
 
     private ILindaServer backupServer;
-    private final LindaBackup backup;
+    private final LindaServerState state;
 
     private final AtomicBoolean writing = new AtomicBoolean(false);
     private final List<Runnable> waitingCallbacks = new ArrayList<>();
@@ -42,7 +42,7 @@ public class LindaServer extends UnicastRemoteObject implements ILindaServer {
             tuples = load();
         }
 
-        this.backup = new LindaBackup(tuples);
+        this.state = new LindaServerState(tuples);
         this.linda = new CentralizedLinda(tuples);
 
         if (this.backupURI != null) {
@@ -100,8 +100,8 @@ public class LindaServer extends UnicastRemoteObject implements ILindaServer {
 
     @Override
     public void eventRegister(Linda.eventMode mode, Linda.eventTiming timing, Tuple template, IRemoteCallback remoteCallback) throws RemoteException {
-        List<TupleCallbackBackup> backups = mode == Linda.eventMode.TAKE ? backup.takers() : backup.readers();
-        TupleCallbackBackup callbackup = new TupleCallbackBackup(template, remoteCallback);
+        List<TransferableTupleCallback> backups = mode == Linda.eventMode.TAKE ? state.takers() : state.readers();
+        TransferableTupleCallback callbackup = new TransferableTupleCallback(template, remoteCallback);
         synchronized (backups) {
             Callback callback = t -> {
                 try {
@@ -182,17 +182,17 @@ public class LindaServer extends UnicastRemoteObject implements ILindaServer {
             try {
                 // Pb : création remote callback côté serveur principal
                 // Donc si le serveur est down les callbacks aussi
-                backupServer.receiveBackup(backup);
+                backupServer.receiveBackup(state);
             } catch (RemoteException e) {
                 throw new RuntimeException(e);
             }
         }
     }
 
-    public void receiveBackup(LindaBackup backup) throws RemoteException {
-        System.out.println("Received backup : " + backup);
-        System.out.println("with " + backup.readers().size() + " read callbacks.");
-        this.linda = new CentralizedLinda(backup.tuples(), backup.readersManager(), backup.takersManager());
+    public void receiveBackup(LindaServerState state) throws RemoteException {
+        System.out.println("Received state : " + state);
+        System.out.println("with " + state.readers().size() + " read callbacks.");
+        this.linda = new CentralizedLinda(state.tuples(), state.readersManager(), state.takersManager());
     }
 
     private void connectBackup() {
