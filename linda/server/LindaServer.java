@@ -34,13 +34,17 @@ public class LindaServer extends UnicastRemoteObject implements ILindaServer {
 
     public LindaServer(File saveFile, String backupURI) throws RemoteException {
         this.saveFile = saveFile;
+        this.backupURI = backupURI;
+
         List<Tuple> tuples = new ArrayList<>();
         if (this.saveFile.exists()) {
+            System.out.println("Recovering from save file.");
             tuples = load();
         }
+
         this.backup = new LindaBackup(tuples);
         this.linda = new CentralizedLinda(tuples);
-        this.backupURI = backupURI;
+
         if (this.backupURI != null) {
             connectBackup();
             scheduleBackup();
@@ -55,10 +59,13 @@ public class LindaServer extends UnicastRemoteObject implements ILindaServer {
         writing.set(true);
         linda.write(t);
         writing.set(false);
-        for (Runnable callback : waitingCallbacks) {
-            callback.run();
+        // Prévenir l'interblocage dû au callback qui se réenregistrent eux-mêmes
+        synchronized (waitingCallbacks) {
+            for (Runnable callback : waitingCallbacks) {
+                callback.run();
+            }
+            waitingCallbacks.clear();
         }
-        waitingCallbacks.clear();
     }
 
     @Override
@@ -93,14 +100,14 @@ public class LindaServer extends UnicastRemoteObject implements ILindaServer {
 
     @Override
     public void eventRegister(Linda.eventMode mode, Linda.eventTiming timing, Tuple template, IRemoteCallback remoteCallback) throws RemoteException {
-        List<TupleCallbackBackup> callbacks = mode == Linda.eventMode.TAKE ? backup.takers() : backup.readers();
+        List<TupleCallbackBackup> backups = mode == Linda.eventMode.TAKE ? backup.takers() : backup.readers();
         TupleCallbackBackup callbackup = new TupleCallbackBackup(template, remoteCallback);
-        synchronized (callbacks) {
+        synchronized (backups) {
             Callback callback = t -> {
                 try {
                     remoteCallback.call(t);
-                    synchronized (callbacks) {
-                        callbacks.remove(callbackup);
+                    synchronized (backups) {
+                        backups.remove(callbackup);
                     }
                 } catch (RemoteException e) {
                     throw new RuntimeException(e);
@@ -144,6 +151,7 @@ public class LindaServer extends UnicastRemoteObject implements ILindaServer {
             }
         }
         try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(saveFile))) {
+            // On ne sauvegarde que les tuples car l'intérêt de sauvegarder les callbacks n'est pas toujours justifié
             oos.writeObject(linda.getTuples());
         } catch (IOException e) {
             e.printStackTrace();

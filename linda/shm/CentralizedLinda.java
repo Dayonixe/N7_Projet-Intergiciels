@@ -100,7 +100,7 @@ public class CentralizedLinda implements Linda {
         return future;
     }
 
-    public synchronized Collection<Tuple> getAll(Tuple template, boolean remove) {
+    private synchronized Collection<Tuple> getAll(Tuple template, boolean remove) {
         List<Tuple> tuples = this.tuples.stream()
                 .filter(t -> t.matches(template)).map(Tuple::deepclone).collect(Collectors.toList());
         if(remove) {
