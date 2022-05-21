@@ -33,36 +33,32 @@ public class CentralizedLinda implements Linda {
 
     @Override
     public synchronized void write(Tuple t) {
-        Tuple newTuple = t.deepclone();
+        t = t.deepclone();
 
         // unlock readers
-        System.out.println("Call all readers (" + readers.matchCount(t) + ")");
+        debug("Call all readers (" + readers.matchCount(t) + ")");
 
         readers.callAll(t);
 
         // unlock one taker
         boolean taken = takers.callOne(t);
-        System.out.println("Call one taker (" + taken + ")");
+        debug("Call one taker (" + taken + ")");
 
         if(taken) {
             return;
         }
 
-        tuples.add(newTuple);
+        tuples.add(t);
     }
 
     @Override
     public Tuple take(Tuple template) {
-        System.out.println("Take " + template);
         return getAsync(template, true).join();
     }
 
     @Override
     public Tuple read(Tuple template) {
-        System.out.println("Before read");
-        Tuple tuple = getAsync(template, false).join();
-        System.out.println("After read");
-        return tuple;
+        return getAsync(template, false).join();
     }
 
     @Override
@@ -86,7 +82,7 @@ public class CentralizedLinda implements Linda {
     }
 
     private synchronized Tuple get(Tuple template, boolean remove) {
-        Optional<Tuple> tuple = this.tuples.stream().filter(t -> t.matches(template)).findFirst();
+        Optional<Tuple> tuple = this.tuples.stream().filter(t -> t.matches(template)).findFirst().map(Tuple::deepclone);
         if(!tuple.isPresent()) {
             return null;
         }
@@ -106,7 +102,7 @@ public class CentralizedLinda implements Linda {
 
     public synchronized Collection<Tuple> getAll(Tuple template, boolean remove) {
         List<Tuple> tuples = this.tuples.stream()
-                .filter(t -> t.matches(template)).collect(Collectors.toList());
+                .filter(t -> t.matches(template)).map(Tuple::deepclone).collect(Collectors.toList());
         if(remove) {
             this.tuples.removeAll(tuples);
         }
@@ -119,7 +115,7 @@ public class CentralizedLinda implements Linda {
             Tuple tuple = get(template, mode == eventMode.TAKE);
 
             if (tuple != null) {
-                System.out.println("Immediate call");
+                debug("Immediate call");
                 // Si on est en mode immédiat et que le listener est parvenu à récupérer un tuple
                 // -> pas besoin de l'ajouter à la liste
                 callback.call(tuple);

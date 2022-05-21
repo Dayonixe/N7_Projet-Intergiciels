@@ -31,17 +31,13 @@ public class TupleCallbackManager {
         this.callbacks.remove(callback);
     }
 
-    public synchronized List<TupleCallback> getAll() {
-        return this.callbacks;
-    }
-
     public synchronized int matchCount(Tuple tuple) {
         return (int) this.callbacks.stream().filter(future -> future.matches(tuple)).count();
     }
 
     public synchronized void callAll(Tuple tuple) {
         List<TupleCallback> callbacks = this.callbacks.stream().filter(future -> future.matches(tuple)).collect(Collectors.toList());
-        callbacks.forEach(future -> future.complete(tuple));
+        callbacks.forEach(future -> future.complete(tuple.deepclone()));
 
         CompletableFuture.allOf(callbacks.toArray(new CompletableFuture[0]));
 
@@ -55,7 +51,7 @@ public class TupleCallbackManager {
             return false;
         }
         TupleCallback callback = callbackOptional.get();
-        callback.complete(tuple);
+        callback.complete(tuple.deepclone());
         callback.join();
         remove(callback);
         return true;
