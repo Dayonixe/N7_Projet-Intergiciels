@@ -35,23 +35,29 @@ public class TupleCallbackManager {
         return (int) this.callbacks.stream().filter(future -> future.matches(tuple)).count();
     }
 
-    public synchronized void callAll(Tuple tuple) {
-        List<TupleCallback> callbacks = this.callbacks.stream().filter(future -> future.matches(tuple)).collect(Collectors.toList());
+    public void callAll(Tuple tuple) {
+        List<TupleCallback> callbacks;
+        synchronized (this) {
+            callbacks = this.callbacks.stream().filter(future -> future.matches(tuple)).collect(Collectors.toList());
+
+            removeAll(callbacks);
+        }
+
         callbacks.forEach(future -> future.complete(tuple.deepclone()));
 
         CompletableFuture.allOf(callbacks.toArray(new CompletableFuture[0]));
-
-        removeAll(callbacks);
     }
 
     public synchronized boolean callOne(Tuple tuple) {
         Optional<TupleCallback> callbackOptional;
-        callbackOptional = callbacks.stream().filter(callback -> callback.matches(tuple)).findFirst();
-        if (!callbackOptional.isPresent()) {
-            return false;
+        synchronized (this) {
+            callbackOptional = callbacks.stream().filter(callback -> callback.matches(tuple)).findFirst();
+            if (!callbackOptional.isPresent()) {
+                return false;
+            }
+            callbackOptional.get().complete(tuple.deepclone());
         }
         TupleCallback callback = callbackOptional.get();
-        callback.complete(tuple.deepclone());
         callback.join();
         remove(callback);
         return true;

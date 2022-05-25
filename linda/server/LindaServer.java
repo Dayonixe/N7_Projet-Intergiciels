@@ -25,9 +25,6 @@ public class LindaServer extends UnicastRemoteObject implements ILindaServer {
     private ILindaServer backupServer;
     private final LindaServerState state;
 
-    private final AtomicBoolean writing = new AtomicBoolean(false);
-    private final List<Runnable> waitingCallbacks = new ArrayList<>();
-
     public LindaServer(File saveFile) throws RemoteException {
         this(saveFile, null);
     }
@@ -56,16 +53,7 @@ public class LindaServer extends UnicastRemoteObject implements ILindaServer {
 
     @Override
     public void write(Tuple t) throws RemoteException {
-        writing.set(true);
         linda.write(t);
-        writing.set(false);
-        // Prévenir l'interblocage dû au callback qui se réenregistrent eux-mêmes
-        synchronized (waitingCallbacks) {
-            for (Runnable callback : waitingCallbacks) {
-                callback.run();
-            }
-            waitingCallbacks.clear();
-        }
     }
 
     @Override
@@ -113,21 +101,7 @@ public class LindaServer extends UnicastRemoteObject implements ILindaServer {
                     throw new RuntimeException(e);
                 }
             };
-            if (writing.get()) {
-                waitingCallbacks.add(() -> {
-                    linda.eventRegister(mode, timing, template, callback);
-                });
-                // Distingo si writing pour prévenir l'interblocage des callback qui se réenregistre eux-mêmes. On appelle les demandes d'entregistrement en attente une fois le write fini.
-
-                // Exemple :
-                // Au moment du write (thread1) : callAll appelle le callback
-                // Le callback est appelé et se réenregistre
-                // Pour ça il appelle eventRegister du Remote dans thread2
-                // PB : le callback se réenregistre dans un nouveau thread ! Il n'a donc pas le lock.
-                // => Interblocage
-            } else {
-                linda.eventRegister(mode, timing, template, callback);
-            }
+            linda.eventRegister(mode, timing, template, callback);
         }
     }
 

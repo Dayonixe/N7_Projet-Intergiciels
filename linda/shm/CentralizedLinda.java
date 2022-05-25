@@ -32,20 +32,21 @@ public class CentralizedLinda implements Linda {
     }
 
     @Override
-    public synchronized void write(Tuple t) {
+    public void write(Tuple t) {
         t = t.deepclone();
 
         // unlock readers
         debug("Call all readers (" + readers.matchCount(t) + ")");
-
         readers.callAll(t);
 
         // unlock one taker
         boolean taken = takers.callOne(t);
         debug("Call one taker (" + taken + ")");
 
-        if(!taken) {
-            tuples.add(t);
+        synchronized (this) {
+            if (!taken) {
+                tuples.add(t);
+            }
         }
     }
 
@@ -108,7 +109,7 @@ public class CentralizedLinda implements Linda {
     }
 
     @Override
-    public synchronized void eventRegister(eventMode mode, eventTiming timing, Tuple template, Callback callback) {
+    public void eventRegister(eventMode mode, eventTiming timing, Tuple template, Callback callback) {
         if (timing == eventTiming.IMMEDIATE) {
             Tuple tuple = get(template, mode == eventMode.TAKE);
 
