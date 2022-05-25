@@ -158,7 +158,7 @@ public class LindaServer extends UnicastRemoteObject implements ILindaServer {
         }
     }
 
-    public void shutdown() {
+    public void shutdown() throws RemoteException {
         save();
     }
 

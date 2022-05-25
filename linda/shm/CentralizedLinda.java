@@ -44,11 +44,9 @@ public class CentralizedLinda implements Linda {
         boolean taken = takers.callOne(t);
         debug("Call one taker (" + taken + ")");
 
-        if(taken) {
-            return;
+        if(!taken) {
+            tuples.add(t);
         }
-
-        tuples.add(t);
     }
 
     @Override

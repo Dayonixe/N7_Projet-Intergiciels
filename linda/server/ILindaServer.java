@@ -27,4 +27,6 @@ public interface ILindaServer extends Remote {
     String getBackupAddress() throws RemoteException;
 
     void receiveBackup(LindaServerState backup) throws RemoteException;
+
+    void shutdown() throws RemoteException;
 }
