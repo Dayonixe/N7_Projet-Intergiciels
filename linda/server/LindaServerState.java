@@ -8,6 +8,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * Etat du serveur linda transferable au backup.
+ */
 public class LindaServerState implements Serializable {
     private final List<TransferableTupleCallback> readers = new ArrayList<>();
     private final List<TransferableTupleCallback> takers = new ArrayList<>();

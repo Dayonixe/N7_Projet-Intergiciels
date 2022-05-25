@@ -6,6 +6,10 @@ import linda.shm.TupleCallback;
 import java.io.Serializable;
 import java.rmi.RemoteException;
 
+/**
+ * Version de TupleCallback transferable à distance.
+ * @see linda.shm.TupleCallback
+ */
 public class TransferableTupleCallback implements Serializable {
     private final Tuple template;
     private final IRemoteCallback callback;

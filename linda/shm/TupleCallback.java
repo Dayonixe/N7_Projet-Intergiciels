@@ -5,6 +5,9 @@ import linda.Tuple;
 
 import java.util.concurrent.CompletableFuture;
 
+/**
+ * Classe qui encapsule un callback et le motif auquel un tuple doit correspondre pour l'appeler
+ */
 public class TupleCallback extends CompletableFuture<Tuple> {
     public final Tuple template;
     public final Callback callback;
