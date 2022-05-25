@@ -14,7 +14,6 @@ import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 import java.rmi.server.UnicastRemoteObject;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 public class LindaServer extends UnicastRemoteObject implements ILindaServer {
     private final File saveFile;
@@ -101,6 +100,7 @@ public class LindaServer extends UnicastRemoteObject implements ILindaServer {
                     throw new RuntimeException(e);
                 }
             };
+            backups.add(callbackup);
             linda.eventRegister(mode, timing, template, callback);
         }
     }

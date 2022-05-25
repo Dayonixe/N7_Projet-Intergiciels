@@ -7,7 +7,7 @@ import java.rmi.RemoteException;
 import java.rmi.server.UnicastRemoteObject;
 
 public class RemoteCallback extends UnicastRemoteObject implements IRemoteCallback {
-    private final Callback callback;
+    private transient final Callback callback;
     public RemoteCallback(Callback callback) throws RemoteException {
         this.callback = callback;
     }
