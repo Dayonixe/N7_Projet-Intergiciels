@@ -1,12 +1,13 @@
 package linda.test.shm;
 
-import com.sun.org.apache.xalan.internal.xsltc.compiler.Template;
 import linda.Tuple;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
@@ -44,11 +45,13 @@ public class TestReadAll extends TestSHM {
             } catch (InterruptedException e) {
                 throw new RuntimeException(e);
             }
+            LINDA.readAll(template); // should not remove tuples
             return LINDA.readAll(template);
         });
 
-        Collection<Tuple> tuples = readAll.join();
+        List<Tuple> tuples = new ArrayList<>(readAll.join());
 
-        System.out.println(tuples);
+        assertEquals(new Tuple(3, "Truc"), tuples.get(0));
+        assertEquals(new Tuple(5, "TDuc"), tuples.get(1));
     }
 }

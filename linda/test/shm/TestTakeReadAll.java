@@ -15,6 +15,7 @@ public class TestTakeReadAll extends TestSHM {
         LINDA.write(new Tuple(11, "non"));
 
         assertEquals(3, LINDA.readAll(template).size());
+        assertEquals(3, LINDA.readAll(template).size());
     }
 
     @Test
