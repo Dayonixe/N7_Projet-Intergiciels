@@ -8,6 +8,9 @@ import java.rmi.registry.LocateRegistry;
 import java.rmi.registry.Registry;
 
 public class MainServer {
+    /**
+     * Starts the backup Linda server and then the main server
+     */
     public static void main(String[] args) throws Exception {
         Registry dns = LocateRegistry.createRegistry(4000);
 
@@ -16,8 +19,5 @@ public class MainServer {
 
         ILindaServer linda = new LindaServer(new File("linda_data.bin"), "rmi://localhost:4000/LindaBackup");
         dns.bind("LindaServer", linda);
-
-        LindaClient client = new LindaClient("rmi://localhost:4000/LindaServer");
-        client.eventRegister(Linda.eventMode.READ, Linda.eventTiming.FUTURE, new Tuple(Object.class), System.out::println);
     }
 }

@@ -42,9 +42,14 @@ public class LindaServer extends UnicastRemoteObject implements ILindaServer {
         this.linda = new CentralizedLinda(tuples);
 
         if (this.backupURI != null) {
-            connectBackup();
-            scheduleBackup();
-            System.out.println("Linda server started with backup " + backupURI + ".");
+            try {
+                connectBackup();
+                scheduleBackup();
+                System.out.println("Linda server started with backup " + backupURI + ".");
+            }catch (Exception e) {
+                e.printStackTrace();
+                System.err.println("Could not connect to backup. Ignoring it.");
+            }
         } else {
             System.out.println("Linda server started without backup.");
         }
@@ -172,16 +177,12 @@ public class LindaServer extends UnicastRemoteObject implements ILindaServer {
         this.linda = new CentralizedLinda(state.tuples(), state.readersManager(), state.takersManager());
     }
 
-    private void connectBackup() {
-        try {
-            URI uri = new URI(backupURI);
-            if (!(uri.getScheme() == null || uri.getScheme().equalsIgnoreCase("rmi"))) {
-                throw new URISyntaxException(backupURI, "Invalid scheme. Expected rmi or nothing.");
-            }
-            Registry dns = LocateRegistry.getRegistry(uri.getHost(), uri.getPort());
-            backupServer = (ILindaServer) dns.lookup(uri.getPath().substring(1));
-        } catch (RemoteException | NotBoundException | URISyntaxException e) {
-            throw new RuntimeException(e);
+    private void connectBackup() throws URISyntaxException, RemoteException, NotBoundException {
+        URI uri = new URI(backupURI);
+        if (!(uri.getScheme() == null || uri.getScheme().equalsIgnoreCase("rmi"))) {
+            throw new URISyntaxException(backupURI, "Invalid scheme. Expected rmi or nothing.");
         }
+        Registry dns = LocateRegistry.getRegistry(uri.getHost(), uri.getPort());
+        backupServer = (ILindaServer) dns.lookup(uri.getPath().substring(1));
     }
 }

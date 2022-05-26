@@ -4,6 +4,9 @@ import linda.Linda;
 import linda.Tuple;
 
 public class MainClient {
+    /**
+     * Just a test Linda Client
+     */
     public static void main(String[] args) throws InterruptedException {
         LindaClient client = new LindaClient("rmi://localhost:4000/LindaServer");
         client.eventRegister(Linda.eventMode.READ, Linda.eventTiming.FUTURE, new Tuple(Integer.class, Integer.class), t -> {
