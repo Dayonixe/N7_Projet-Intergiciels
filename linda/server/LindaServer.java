@@ -33,7 +33,7 @@ public class LindaServer extends UnicastRemoteObject implements ILindaServer {
         this.backupURI = backupURI;
 
         List<Tuple> tuples = new ArrayList<>();
-        if (this.saveFile.exists()) {
+        if (this.saveFile != null && this.saveFile.exists()) {
             System.out.println("Recovering from save file.");
             tuples = load();
         }
@@ -116,6 +116,9 @@ public class LindaServer extends UnicastRemoteObject implements ILindaServer {
     }
 
     public void save() {
+        if(saveFile == null) {
+            return;
+        }
         if (!saveFile.exists()) {
             try {
                 saveFile.createNewFile();

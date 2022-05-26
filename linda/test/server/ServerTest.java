@@ -15,7 +15,7 @@ public abstract class ServerTest {
         if(linda != null) {
             return;
         }
-        linda = new LindaServer(new File("linda_data.bin"));
+        linda = new LindaServer(null);
         Registry dns = LocateRegistry.createRegistry(4000);
         dns.bind("LindaServer", linda);
     }

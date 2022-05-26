@@ -8,6 +8,8 @@ import org.junit.Test;
 import java.rmi.AlreadyBoundException;
 import java.rmi.RemoteException;
 
+import static org.junit.Assert.assertEquals;
+
 public class ServerWriteReadTest extends ServerTest {
     private static LindaClient client;
 
@@ -22,5 +24,6 @@ public class ServerWriteReadTest extends ServerTest {
         client.write(new Tuple(5, 9));
         Tuple read = client.read(new Tuple(Integer.class, Integer.class));
         System.out.println("Read "+read);
+        assertEquals(new Tuple(5, 9), read);
     }
 }

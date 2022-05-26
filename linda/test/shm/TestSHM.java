@@ -15,7 +15,7 @@ import java.util.concurrent.Executors;
 public abstract class TestSHM {
     @Parameterized.Parameters
     public static Object[][] data() {
-        return new Object[10][0];
+        return new Object[1][0]; //new Object[10][0]; pour lancer 10 fois chaque test (pour s'assurer qu'il passe tout le temps)
     }
     protected final Linda LINDA = new CentralizedLinda();
     private static final Executor EXECUTOR = Executors.newCachedThreadPool();
@@ -65,8 +65,6 @@ public abstract class TestSHM {
             System.out.println("Callback "+t);
             count++;
             register();
-//            String trace = Arrays.stream(Thread.currentThread().getStackTrace()).map(StackTraceElement::toString).collect(Collectors.joining("\n"));
-//            System.out.println(trace);
         }
 
         public int getCount() {
